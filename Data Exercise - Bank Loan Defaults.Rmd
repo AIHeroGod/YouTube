@@ -1,0 +1,176 @@
+---
+title: "Data Exercise - Bank Loan Defaults"
+output:
+  html_document:
+    code_folding: show
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+subtitle: ExamPA.net
+---
+
+The first 10-20 minutes of the exam will be spent just on data manipulation.  This will count for between 15-20% of the final grade.  This notebook provides an example of how to do this.
+
+## Data 
+
+https://archive.ics.uci.edu/ml/datasets/Bank+Marketing
+
+|Variable                                                 |Description                                                                                                                                         |Values                                                                                                                                                                                                                                                                                                                                                |
+|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| age (numeric)                                           |                                                                                                                                                    |                                                                                                                                                                                                                                                                                                                                                      |
+| job                                                     | type of job (categorical                                                                                                                           | 'admin.','blue                                                                                                                                                                                                                                                                                                                                       |
+| marital                                                 | marital status (categorical                                                                                                                        | 'divorced','married','single','unknown'; note -  'divorced' means divorced or widowed)                                                                                                                                                                                                                                                               |
+| education (categorical                                  | 'basic.4y','basic.6y','basic.9y','high.school','illiterate','professional.course','university.degree','unknown')                                   |                                                                                                                                                                                                                                                                                                                                                      |
+| default                                                 | has credit in default? (categorical                                                                                                                | 'no','yes','unknown')                                                                                                                                                                                                                                                                                                                                |
+| housing                                                 | has housing loan? (categorical                                                                                                                     | 'no','yes','unknown')                                                                                                                                                                                                                                                                                                                                |
+| loan                                                    | has personal loan? (categorical                                                                                                                    | 'no','yes','unknown')                                                                                                                                                                                                                                                                                                                                |
+| contact                                                 | contact communication type (categorical                                                                                                            | 'cellular','telephone')                                                                                                                                                                                                                                                                                                                              |
+| month                                                   | last contact month of year (categorical                                                                                                            | 'jan', 'feb', 'mar', ..., 'nov', 'dec')                                                                                                                                                                                                                                                                                                              |
+| day_of_week                                             | last contact day of the week (categorical                                                                                                          | 'mon','tue','wed','thu','fri')                                                                                                                                                                                                                                                                                                                       |
+| duration                                                | last contact duration, in seconds (numeric). Important note -  this attribute highly affects the output target (e.g., if duration=0 then y='no'). Yet, the duration is not known before a call is performed. Also, after the end of the call y is obviously known. Thus, this input should only be included for benchmark purposes and should be discarded if the intention is to have a realistic predictive model.|                                                                                                                                                                                                                                                                                                                                                      |
+| campaign                                                | number of contacts performed during this campaign and for this client (numeric, includes last contact)                                             |                                                                                                                                                                                                                                                                                                                                                      |
+| pdays                                                   | number of days that passed by after the client was last contacted from a previous campaign (numeric; 999 means client was not previously contacted)|                                                                                                                                                                                                                                                                                                                                                      |
+| previous                                                | number of contacts performed before this campaign and for this client (numeric)                                                                    |                                                                                                                                                                                                                                                                                                                                                      |
+| poutcome                                                | outcome of the previous marketing campaign (categorical                                                                                            | 'failure','nonexistent','success')                                                                                                                                                                                                                                                                                                                   |
+| emp.var.rate                                            | employment variation rate                                                                                                                          |                                                                                                                                                                                                                                                                                                                                                      |
+| cons.price.idx                                          | consumer price index                                                                                                                               |                                                                                                                                                                                                                                                                                                                                                      |
+| cons.conf.idx                                           | consumer confidence index                                                                                                                          |                                                                                                                                                                                                                                                                                                                                                      |
+| euribor3m                                               | euribor 3 month rate                                                                                                                               |                                                                                                                                                                                                                                                                                                                                                      |
+| nr.employed                                             | number of employees                                                                                                                                |                                                                                                                                                                                                                                                                                                                                                      |
+| y                                                       |has the client subscribed a term deposit?                                                                                                           |yes', 'no'                                                                                                                                                                                                                                                                                                                                            |
+
+
+
+```{r message = F}
+library(tidyverse)
+theme_set(theme_bw())
+bank <- read_delim("bank-additional-full.csv", delim = ";")
+
+```
+
+## Task 1 - Examine the Target Varible
+
+Examine the target variable y, which is whether or not the client has subscribed to a term deposite.
+
+21 - y - has the client subscribed a term deposit? (binary: 'yes','no')
+
+```{r}
+bank %>% count(y)
+bank %>% group_by(day_of_week) %>% summarise(percent_subscribed = mean(y=="yes"))
+bank %>% group_by(education) %>% summarise(percent_subscribed = mean(y=="yes")) %>% arrange(desc(percent_subscribed))
+```
+
+## Task 2 - Decide on which variables to discard
+
+Read the data dictionary and if appropriate, discard any variables that would not be useful for building a model.
+
+```{r}
+#the data dictionary says to not use duration in predictive modeling
+bank <- bank %>% select(-duration)
+```
+
+We exclude the duration variable because it will not be known in advance of calling the individual and so should not be used in the predictive model.
+
+"Yet, the duration is not known before a call is performed"
+
+## Task 3 - Examine the numeric variables
+
+- age 
+- campaign 
+- pdays 
+- previous
+- emp.var.rate, cons.price.idx, cons.conf.idx, euribor3m, nr.employed 
+
+```{r}
+bank %>% select_if(is.numeric) %>% summary()
+bank %>% count(cons.price.idx)
+
+#example creating a histogram
+bank %>% ggplot(aes(cons.price.idx)) + geom_histogram()
+bank %>% count(emp.var.rate)
+
+bank %>% count(pdays)
+
+#example of how to create bins
+bank <- bank %>% 
+  mutate(pdays_flag = ifelse(pdays == 999, yes = "Flag", "NoFlag"),
+         pdays_bin = case_when(pdays <= 5 ~ "0-5",
+                               pdays <= 10 ~ "0-10",
+                               pdays <= 15 ~ "10-15",
+                               pdays <= 20 ~ "15-20",
+                               pdays <= 30 ~ "20-30", 
+                               pdays == 999 ~ "None"))
+
+#set factor levels to those with the most observations
+bank <- bank %>% 
+  mutate(pdays_flag = fct_infreq(pdays_flag),
+         pdays_bin = fct_infreq(pdays_bin))
+
+bank %>% count(pdays_flag)
+bank %>% count(pdays_bin)
+
+
+```
+
+## Task 4 - Examine the factor variables
+
+```{r}
+bank %>% 
+  mutate_if(is.character, as.factor) %>% 
+  select_if(is.factor) %>% 
+  summary()
+
+fct_order <- bank %>% 
+  count(job) %>% 
+  arrange(n) %>% 
+  select(job) %>% 
+  unlist() %>% 
+  as.character()
+
+bank %>% 
+  mutate(job = fct_relevel(job, fct_order)) %>% 
+  ggplot(aes(job, fill = y)) + 
+  geom_bar(stat = "count") + 
+  coord_flip()
+
+bank %>% 
+  mutate(job = fct_relevel(job, fct_order)) %>% 
+  ggplot(aes(job, fill = y)) + 
+  geom_bar(stat = "count", position = "fill") + 
+  coord_flip()
+
+bank %>% 
+  group_by(marital) %>% 
+  summarise(percent_subscribed = round(mean(y == "yes"),2)) %>% 
+  arrange(desc(percent_subscribed))
+```
+
+```{r}
+fct_order <- bank %>% 
+  count(marital) %>% 
+  arrange(n) %>% 
+  select(marital) %>% 
+  unlist() %>% 
+  as.character()
+
+bank %>% 
+  group_by(marital) %>% 
+  summarise(percent_subscribed = mean(y == "yes"))
+
+bank %>% 
+  group_by(day_of_week, education) %>% 
+  summarise(percent_subscribed = round(mean(y == "yes"),1))
+
+bank %>% 
+  count(job) %>% 
+  arrange(desc(n)) %>% 
+  mutate(pct = round(n/sum(n),1))
+
+bank %>% 
+  group_by(day_of_week, job, education, contact) %>% 
+  summarise(percent_subscribed = round(mean(y == "yes"),2)) %>% 
+  arrange(desc(percent_subscribed))
+```
+
